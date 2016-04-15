@@ -195,7 +195,16 @@ def init():
         if url.count('/') == 2 and not url.endswith('/'):
             url = url + '/'
 
-        engine = create_engine(url, echo=False)
+        if (
+            url.count('/') == 3 and
+            url.endswith('/') and
+            url.startswith('postgresql://')
+        ):
+            connection_url = url + 'template1'
+        else:
+            connection_url = url
+
+        engine = create_engine(connection_url, echo=False)
         try:
             conn = engine.connect()
         except OperationalError as err:
@@ -237,16 +246,22 @@ def init():
         default=db_name
     )
 
+    raw_url = url
+
+    if engine.dialect.name == 'postgresql':
+        raw_url = raw_url + 'template1'
+
     with open('stellar.yaml', 'w') as project_file:
         project_file.write(
             """
 project_name: '%(name)s'
 tracked_databases: ['%(db_name)s']
-url: '%(url)s'
+url: '%(raw_url)s'
 stellar_url: '%(url)sstellar_data'
             """.strip() %
             {
                 'name': name,
+                'raw_url': raw_url,
                 'url': url,
                 'db_name': db_name
             }
@@ -275,14 +290,15 @@ def main():
             'pymysql': 'MySQL',
         }
         for library, name in libraries.items():
-            if str(e) == 'No module named %s' % library:
-                click.echo("Python library %s is required for %s support." %
-                           (library, name)
+            if 'No module named' in str(e) and library in str(e):
+                click.echo(
+                    "Python library %s is required for %s support." %
+                    (library, name)
                 )
                 click.echo("You can install it with pip:")
                 click.echo("pip install %s" % library)
                 sys.exit(1)
-            elif str(e) == 'No module named MySQLdb':
+            elif 'No module named' in str(e) and 'MySQLdb' in str(e):
                 click.echo(
                     "MySQLdb binary drivers are required for MySQL support. "
                     "You can try installing it with these instructions: "
